@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import LogoutButton from '../components/LogoutButton'
@@ -12,14 +13,31 @@ const statusLabels: Record<string, string> = {
   cancelada: 'Cancelada',
 }
 
+const paymentStatusLabels: Record<string, string> = {
+  pendiente: 'Anticipo pendiente',
+  comprobante_subido: 'Comprobante en revisión',
+  confirmado: 'Anticipo confirmado',
+  rechazado: 'Comprobante rechazado',
+}
+
 export default function AdminPanel() {
   const router = useRouter()
   const [appointments, setAppointments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [authorized, setAuthorized] = useState(false)
 
+  async function loadAppointments() {
+    const { data } = await supabase
+      .from('appointments')
+      .select('*, services(name, price, duration_minutes), profiles(full_name, phone), appointment_addons(addons(name, extra_price))')
+      .order('scheduled_at', { ascending: true })
+
+    setAppointments(data ?? [])
+  }
+
   useEffect(() => {
-    async function load() {
+    async function init() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
         router.push('/login')
@@ -34,21 +52,35 @@ export default function AdminPanel() {
       }
 
       setAuthorized(true)
-
-      const { data } = await supabase
-        .from('appointments')
-        .select('*, services(name, price, duration_minutes), profiles(full_name, phone), appointment_addons(addons(name, extra_price))')
-        .order('scheduled_at', { ascending: true })
-
-      setAppointments(data ?? [])
+      await loadAppointments()
       setLoading(false)
     }
-    load()
+    init()
   }, [router])
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    await loadAppointments()
+    setRefreshing(false)
+  }
 
   async function updateStatus(id: string, status: string) {
     await supabase.from('appointments').update({ status }).eq('id', id)
     setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)))
+  }
+
+  async function updatePaymentStatus(id: string, payment_status: string) {
+    await supabase.from('appointments').update({ payment_status }).eq('id', id)
+    setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, payment_status } : a)))
+  }
+
+  async function viewComprobante(path: string) {
+    const { data } = await supabase.storage.from('comprobantes').createSignedUrl(path, 60 * 5)
+    if (data?.signedUrl) {
+      window.open(data.signedUrl, '_blank')
+    } else {
+      alert('No se pudo abrir el comprobante')
+    }
   }
 
   function total(a: any) {
@@ -72,7 +104,14 @@ export default function AdminPanel() {
             <h1 className="text-2xl font-semibold text-gray-900">Panel de citas</h1>
             <p className="mt-1 text-sm text-gray-500">Todas las citas agendadas por las clientas</p>
           </div>
-          <LogoutButton />
+          <div className="flex items-center gap-4">
+            <button onClick={handleRefresh} disabled={refreshing} className="text-sm text-gray-500 underline disabled:opacity-50">
+              {refreshing ? 'Actualizando...' : 'Actualizar'}
+            </button>
+            <Link href="/admin/servicios" className="text-sm text-gray-500 underline">Servicios</Link>
+            <Link href="/admin/terminos" className="text-sm text-gray-500 underline">Editar términos</Link>
+            <LogoutButton />
+          </div>
         </div>
 
         <div className="mt-6 space-y-3">
@@ -105,10 +144,33 @@ export default function AdminPanel() {
 
               {a.notes && <p className="text-sm text-gray-400 mt-1">{a.notes}</p>}
 
+              {a.deposit_amount > 0 && (
+                <div className="mt-3 border-t pt-3">
+                  <p className="text-xs font-medium text-gray-700">
+                    Anticipo: ${Number(a.deposit_amount).toLocaleString('es-MX')} — {paymentStatusLabels[a.payment_status]}
+                  </p>
+                  {a.payment_proof_path && (
+                    <button onClick={() => viewComprobante(a.payment_proof_path)} className="text-xs text-blue-700 underline mt-1">
+                      Ver comprobante
+                    </button>
+                  )}
+                  {a.payment_status !== 'confirmado' && (
+                    <div className="flex gap-3 mt-2">
+                      <button onClick={() => updatePaymentStatus(a.id, 'confirmado')} className="text-xs font-medium text-green-700">
+                        Confirmar pago
+                      </button>
+                      <button onClick={() => updatePaymentStatus(a.id, 'rechazado')} className="text-xs font-medium text-red-600">
+                        Rechazar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="mt-3 flex gap-3">
                 {a.status === 'pendiente' && (
                   <button onClick={() => updateStatus(a.id, 'confirmada')} className="text-xs font-medium text-green-700">
-                    Confirmar
+                    Confirmar cita
                   </button>
                 )}
                 {a.status !== 'completada' && a.status !== 'cancelada' && (

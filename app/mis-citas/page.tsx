@@ -11,6 +11,13 @@ const statusLabels: Record<string, string> = {
   cancelada: 'Cancelada',
 }
 
+const paymentStatusLabels: Record<string, string> = {
+  pendiente: 'Anticipo pendiente',
+  comprobante_subido: 'Comprobante en revisión',
+  confirmado: 'Anticipo confirmado',
+  rechazado: 'Comprobante rechazado, sube uno nuevo',
+}
+
 export default function MisCitas() {
   const router = useRouter()
   const [appointments, setAppointments] = useState<any[]>([])
@@ -39,6 +46,31 @@ export default function MisCitas() {
   async function cancelar(id: string) {
     await supabase.from('appointments').update({ status: 'cancelada' }).eq('id', id)
     setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'cancelada' } : a)))
+  }
+
+  async function uploadComprobante(appointmentId: string, file: File) {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const ext = file.name.split('.').pop()
+    const path = `${user.id}/${appointmentId}-${Date.now()}.${ext}`
+
+    const { error: uploadError } = await supabase.storage.from('comprobantes').upload(path, file)
+    if (uploadError) {
+      alert('Error al subir: ' + uploadError.message)
+      return
+    }
+
+    await supabase
+      .from('appointments')
+      .update({ payment_proof_path: path, payment_status: 'comprobante_subido' })
+      .eq('id', appointmentId)
+
+    setAppointments((prev) =>
+      prev.map((a) =>
+        a.id === appointmentId ? { ...a, payment_proof_path: path, payment_status: 'comprobante_subido' } : a
+      )
+    )
   }
 
   function total(a: any) {
@@ -85,6 +117,25 @@ export default function MisCitas() {
               <p className="text-sm font-medium text-gray-700 mt-2">Total: ${total(a).toLocaleString('es-MX')}</p>
 
               {a.notes && <p className="text-sm text-gray-400 mt-1">{a.notes}</p>}
+
+              {a.deposit_amount > 0 && (
+                <div className="mt-3 border-t pt-3">
+                  <p className="text-xs font-medium text-gray-700">
+                    Anticipo: ${Number(a.deposit_amount).toLocaleString('es-MX')} — {paymentStatusLabels[a.payment_status]}
+                  </p>
+                  {(a.payment_status === 'pendiente' || a.payment_status === 'rechazado') && (
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="mt-2 text-xs"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0]
+                        if (file) uploadComprobante(a.id, file)
+                      }}
+                    />
+                  )}
+                </div>
+              )}
 
               {a.status !== 'cancelada' && a.status !== 'completada' && (
                 <button onClick={() => cancelar(a.id)} className="mt-3 text-xs font-medium text-red-600">
