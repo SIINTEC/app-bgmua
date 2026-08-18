@@ -26,7 +26,7 @@ export default function MisCitas() {
 
       const { data } = await supabase
         .from('appointments')
-        .select('*, services(name, price, duration_minutes)')
+        .select('*, services(name, price, duration_minutes), appointment_addons(addons(name, extra_price))')
         .eq('client_id', user.id)
         .order('scheduled_at', { ascending: true })
 
@@ -41,6 +41,15 @@ export default function MisCitas() {
     setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status: 'cancelada' } : a)))
   }
 
+  function total(a: any) {
+    const base = Number(a.services?.price ?? 0)
+    const extras = (a.appointment_addons ?? []).reduce(
+      (sum: number, ea: any) => sum + Number(ea.addons?.extra_price ?? 0),
+      0
+    )
+    return base + extras
+  }
+
   if (loading) {
     return <main className="min-h-screen flex items-center justify-center text-gray-500">Cargando...</main>
   }
@@ -51,9 +60,7 @@ export default function MisCitas() {
         <h1 className="text-2xl font-semibold text-gray-900">Mis citas</h1>
 
         <div className="mt-6 space-y-3">
-          {appointments.length === 0 && (
-            <p className="text-gray-500">Todavía no tienes citas agendadas.</p>
-          )}
+          {appointments.length === 0 && <p className="text-gray-500">Todavía no tienes citas agendadas.</p>}
 
           {appointments.map((a) => (
             <div key={a.id} className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
@@ -66,6 +73,17 @@ export default function MisCitas() {
               <p className="text-sm text-gray-500 mt-1">
                 {new Date(a.scheduled_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
+
+              {a.appointment_addons?.length > 0 && (
+                <ul className="mt-2 text-xs text-gray-500 list-disc list-inside">
+                  {a.appointment_addons.map((ea: any, i: number) => (
+                    <li key={i}>{ea.addons?.name} (+${Number(ea.addons?.extra_price).toLocaleString('es-MX')})</li>
+                  ))}
+                </ul>
+              )}
+
+              <p className="text-sm font-medium text-gray-700 mt-2">Total: ${total(a).toLocaleString('es-MX')}</p>
+
               {a.notes && <p className="text-sm text-gray-400 mt-1">{a.notes}</p>}
 
               {a.status !== 'cancelada' && a.status !== 'completada' && (

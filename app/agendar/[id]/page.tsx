@@ -8,6 +8,8 @@ export default function Agendar() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
   const [service, setService] = useState<any>(null)
+  const [addons, setAddons] = useState<any[]>([])
+  const [selectedAddons, setSelectedAddons] = useState<string[]>([])
   const [scheduledAt, setScheduledAt] = useState('')
   const [notes, setNotes] = useState('')
   const [error, setError] = useState('')
@@ -21,12 +23,24 @@ export default function Agendar() {
         router.push('/login')
         return
       }
-      const { data } = await supabase.from('services').select('*').eq('id', id).single()
-      setService(data)
+      const { data: serviceData } = await supabase.from('services').select('*').eq('id', id).single()
+      const { data: addonsData } = await supabase.from('addons').select('*').eq('active', true)
+      setService(serviceData)
+      setAddons(addonsData ?? [])
       setChecking(false)
     }
     init()
   }, [id, router])
+
+  function toggleAddon(addonId: string) {
+    setSelectedAddons((prev) =>
+      prev.includes(addonId) ? prev.filter((a) => a !== addonId) : [...prev, addonId]
+    )
+  }
+
+  const total =
+    Number(service?.price ?? 0) +
+    addons.filter((a) => selectedAddons.includes(a.id)).reduce((sum, a) => sum + Number(a.extra_price), 0)
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -39,21 +53,35 @@ export default function Agendar() {
       return
     }
 
-    const { error } = await supabase.from('appointments').insert({
-      client_id: user.id,
-      service_id: id,
-      scheduled_at: new Date(scheduledAt).toISOString(),
-      notes,
-    })
+    const { data: appointment, error: insertError } = await supabase
+      .from('appointments')
+      .insert({
+        client_id: user.id,
+        service_id: id,
+        scheduled_at: new Date(scheduledAt).toISOString(),
+        notes,
+      })
+      .select()
+      .single()
 
-    setLoading(false)
-
-    if (error) {
-      setError(error.message)
+    if (insertError || !appointment) {
+      setLoading(false)
+      setError(insertError?.message ?? 'No se pudo crear la cita')
       return
     }
 
-    router.push('/')
+    if (selectedAddons.length > 0) {
+      const rows = selectedAddons.map((addon_id) => ({ appointment_id: appointment.id, addon_id }))
+      const { error: addonsError } = await supabase.from('appointment_addons').insert(rows)
+      if (addonsError) {
+        setLoading(false)
+        setError(addonsError.message)
+        return
+      }
+    }
+
+    setLoading(false)
+    router.push('/mis-citas')
   }
 
   if (checking) {
@@ -61,12 +89,27 @@ export default function Agendar() {
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-10">
       <form onSubmit={handleSubmit} className="w-full max-w-sm bg-white p-6 rounded-xl shadow-sm ring-1 ring-gray-200 space-y-4">
         <h1 className="text-xl font-semibold text-gray-900">Agendar: {service?.name}</h1>
         <p className="text-sm text-gray-500">
           ${Number(service?.price).toLocaleString('es-MX')} · {service?.duration_minutes} min
         </p>
+
+        {addons.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium text-gray-700">Extras (opcional)</p>
+            {addons.map((a) => (
+              <label key={a.id} className="flex items-center justify-between text-sm text-gray-600">
+                <span className="flex items-center gap-2">
+                  <input type="checkbox" checked={selectedAddons.includes(a.id)} onChange={() => toggleAddon(a.id)} />
+                  {a.name}
+                </span>
+                <span>+${Number(a.extra_price).toLocaleString('es-MX')}</span>
+              </label>
+            ))}
+          </div>
+        )}
 
         <input
           type="datetime-local"
@@ -81,6 +124,11 @@ export default function Agendar() {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
+
+        <div className="flex items-center justify-between border-t pt-3">
+          <span className="text-sm font-medium text-gray-700">Total</span>
+          <span className="font-semibold text-gray-900">${total.toLocaleString('es-MX')}</span>
+        </div>
 
         {error && <p className="text-sm text-red-600">{error}</p>}
 

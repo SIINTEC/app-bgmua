@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import LogoutButton from './components/LogoutButton'
+import AdminRedirect from './components/AdminRedirect'
 
 export default async function Home() {
   const { data: services, error } = await supabase
@@ -11,14 +12,20 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
+      <AdminRedirect />
       <div className="mx-auto max-w-2xl">
-        <h1 className="text-2xl font-semibold text-gray-900">Nuestros servicios</h1>
-        <Link href="/mis-citas" className="text-sm text-gray-500 underline">
-  Ver mis citas
-</Link>
-<LogoutButton />
-
-        <p className="mt-1 text-sm text-gray-500">Elige el servicio que quieres agendar</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">Nuestros servicios</h1>
+            <p className="mt-1 text-sm text-gray-500">Elige el servicio que quieres agendar</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <Link href="/mis-citas" className="text-sm text-gray-500 underline">
+              Ver mis citas
+            </Link>
+            <LogoutButton />
+          </div>
+        </div>
 
         {error && <p className="mt-6 text-red-600">Error: {error.message}</p>}
 
