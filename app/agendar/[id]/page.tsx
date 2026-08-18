@@ -42,7 +42,7 @@ export default function Agendar() {
     const { error } = await supabase.from('appointments').insert({
       client_id: user.id,
       service_id: id,
-      scheduled_at: scheduledAt,
+      scheduled_at: new Date(scheduledAt).toISOString(),
       notes,
     })
 

@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import LogoutButton from './components/LogoutButton'
 
 export default async function Home() {
   const { data: services, error } = await supabase
@@ -12,6 +13,11 @@ export default async function Home() {
     <main className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-2xl">
         <h1 className="text-2xl font-semibold text-gray-900">Nuestros servicios</h1>
+        <Link href="/mis-citas" className="text-sm text-gray-500 underline">
+  Ver mis citas
+</Link>
+<LogoutButton />
+
         <p className="mt-1 text-sm text-gray-500">Elige el servicio que quieres agendar</p>
 
         {error && <p className="mt-6 text-red-600">Error: {error.message}</p>}
