@@ -33,7 +33,7 @@ export default function MisCitas() {
 
       const { data } = await supabase
         .from('appointments')
-        .select('*, services(name, price, duration_minutes), appointment_addons(addons(name, extra_price))')
+        .select('*, services(name, price, duration_minutes), appointment_addons(addons(name, extra_price)), appointment_staff(staff(full_name, bio, photo_url))')
         .eq('client_id', user.id)
         .order('scheduled_at', { ascending: true })
 
@@ -105,6 +105,25 @@ export default function MisCitas() {
               <p className="text-sm text-gray-500 mt-1">
                 {new Date(a.scheduled_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
+
+              {a.appointment_staff?.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  {a.appointment_staff.map((as: any, i: number) => (
+                    <div key={i} className="flex items-center gap-2 bg-gray-50 rounded-lg p-2">
+                      {as.staff?.photo_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={as.staff.photo_url} alt={as.staff.full_name} className="w-9 h-9 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-gray-200" />
+                      )}
+                      <div>
+                        <p className="text-xs font-medium text-gray-700">Te atenderá: {as.staff?.full_name}</p>
+                        {as.staff?.bio && <p className="text-xs text-gray-500">{as.staff.bio}</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {a.appointment_addons?.length > 0 && (
                 <ul className="mt-2 text-xs text-gray-500 list-disc list-inside">

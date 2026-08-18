@@ -23,6 +23,7 @@ const paymentStatusLabels: Record<string, string> = {
 export default function AdminPanel() {
   const router = useRouter()
   const [appointments, setAppointments] = useState<any[]>([])
+  const [staffList, setStaffList] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [authorized, setAuthorized] = useState(false)
@@ -30,10 +31,15 @@ export default function AdminPanel() {
   async function loadAppointments() {
     const { data } = await supabase
       .from('appointments')
-      .select('*, services(name, price, duration_minutes), profiles(full_name, phone), appointment_addons(addons(name, extra_price))')
+      .select('*, services(name, price, duration_minutes), profiles(full_name, phone), appointment_addons(addons(name, extra_price)), appointment_staff(staff(id, full_name))')
       .order('scheduled_at', { ascending: true })
 
     setAppointments(data ?? [])
+  }
+
+  async function loadStaff() {
+    const { data } = await supabase.from('staff').select('*').eq('active', true)
+    setStaffList(data ?? [])
   }
 
   useEffect(() => {
@@ -52,7 +58,7 @@ export default function AdminPanel() {
       }
 
       setAuthorized(true)
-      await loadAppointments()
+      await Promise.all([loadAppointments(), loadStaff()])
       setLoading(false)
     }
     init()
@@ -60,7 +66,7 @@ export default function AdminPanel() {
 
   async function handleRefresh() {
     setRefreshing(true)
-    await loadAppointments()
+    await Promise.all([loadAppointments(), loadStaff()])
     setRefreshing(false)
   }
 
@@ -72,6 +78,15 @@ export default function AdminPanel() {
   async function updatePaymentStatus(id: string, payment_status: string) {
     await supabase.from('appointments').update({ payment_status }).eq('id', id)
     setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, payment_status } : a)))
+  }
+
+  async function toggleStaffAssignment(appointmentId: string, staffId: string, isAssigned: boolean) {
+    if (isAssigned) {
+      await supabase.from('appointment_staff').delete().eq('appointment_id', appointmentId).eq('staff_id', staffId)
+    } else {
+      await supabase.from('appointment_staff').insert({ appointment_id: appointmentId, staff_id: staffId })
+    }
+    await loadAppointments()
   }
 
   async function viewComprobante(path: string) {
@@ -99,7 +114,7 @@ export default function AdminPanel() {
   return (
     <main className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-3xl">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-2">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Panel de citas</h1>
             <p className="mt-1 text-sm text-gray-500">Todas las citas agendadas por las clientas</p>
@@ -108,6 +123,7 @@ export default function AdminPanel() {
             <button onClick={handleRefresh} disabled={refreshing} className="text-sm text-gray-500 underline disabled:opacity-50">
               {refreshing ? 'Actualizando...' : 'Actualizar'}
             </button>
+            <Link href="/admin/staff" className="text-sm text-gray-500 underline">Equipo</Link>
             <Link href="/admin/servicios" className="text-sm text-gray-500 underline">Servicios</Link>
             <Link href="/admin/terminos" className="text-sm text-gray-500 underline">Editar términos</Link>
             <LogoutButton />
@@ -131,6 +147,25 @@ export default function AdminPanel() {
               <p className="text-sm text-gray-500 mt-1">
                 {new Date(a.scheduled_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
+
+              <div className="mt-2">
+                <p className="text-xs text-gray-500 mb-1">Equipo asignado:</p>
+                <div className="flex flex-wrap gap-3">
+                  {staffList.map((s) => {
+                    const isAssigned = a.appointment_staff?.some((as: any) => as.staff?.id === s.id)
+                    return (
+                      <label key={s.id} className="flex items-center gap-1 text-xs text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={!!isAssigned}
+                          onChange={() => toggleStaffAssignment(a.id, s.id, !!isAssigned)}
+                        />
+                        {s.full_name}
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
 
               {a.appointment_addons?.length > 0 && (
                 <ul className="mt-2 text-xs text-gray-500 list-disc list-inside">
