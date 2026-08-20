@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import NotificationPrompt from '../components/NotificationPrompt'
 
 const statusLabels: Record<string, string> = {
   pendiente: 'Pendiente',
@@ -90,7 +91,7 @@ export default function MisCitas() {
     <main className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-2xl">
         <h1 className="text-2xl font-semibold text-gray-900">Mis citas</h1>
-
+        <NotificationPrompt />
         <div className="mt-6 space-y-3">
           {appointments.length === 0 && <p className="text-gray-500">Todavía no tienes citas agendadas.</p>}
 

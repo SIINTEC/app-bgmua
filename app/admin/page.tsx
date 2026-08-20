@@ -80,14 +80,34 @@ export default function AdminPanel() {
     setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, payment_status } : a)))
   }
 
-  async function toggleStaffAssignment(appointmentId: string, staffId: string, isAssigned: boolean) {
-    if (isAssigned) {
-      await supabase.from('appointment_staff').delete().eq('appointment_id', appointmentId).eq('staff_id', staffId)
-    } else {
-      await supabase.from('appointment_staff').insert({ appointment_id: appointmentId, staff_id: staffId })
+async function toggleStaffAssignment(
+  appointmentId: string,
+  staffId: string,
+  isAssigned: boolean,
+  clientId: string,
+  staffName: string
+) {
+  if (isAssigned) {
+    await supabase.from('appointment_staff').delete().eq('appointment_id', appointmentId).eq('staff_id', staffId)
+  } else {
+    await supabase.from('appointment_staff').insert({ appointment_id: appointmentId, staff_id: staffId })
+
+    const { data: { session } } = await supabase.auth.getSession()
+    if (session) {
+      fetch('/api/notify-staff-assigned', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({
+          clientId,
+          title: 'Personal asignado a tu cita',
+          body: `${staffName} te atenderá en tu próxima cita.`,
+          url: '/mis-citas',
+        }),
+      }).catch(() => {})
     }
-    await loadAppointments()
   }
+  await loadAppointments()
+}
 
   async function viewComprobante(path: string) {
     const { data } = await supabase.storage.from('comprobantes').createSignedUrl(path, 60 * 5)
@@ -158,7 +178,7 @@ export default function AdminPanel() {
                         <input
                           type="checkbox"
                           checked={!!isAssigned}
-                          onChange={() => toggleStaffAssignment(a.id, s.id, !!isAssigned)}
+                          onChange={() => toggleStaffAssignment(a.id, s.id, !!isAssigned, a.client_id, s.full_name)}
                         />
                         {s.full_name}
                       </label>
