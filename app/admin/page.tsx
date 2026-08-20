@@ -20,6 +20,18 @@ const paymentStatusLabels: Record<string, string> = {
   rechazado: 'Comprobante rechazado',
 }
 
+function monthKey(dateStr: string) {
+  const d = new Date(dateStr)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function monthLabel(key: string) {
+  const [y, m] = key.split('-').map(Number)
+  const d = new Date(y, m - 1, 1)
+  const label = d.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })
+  return label.charAt(0).toUpperCase() + label.slice(1)
+}
+
 export default function AdminPanel() {
   const router = useRouter()
   const [appointments, setAppointments] = useState<any[]>([])
@@ -27,6 +39,8 @@ export default function AdminPanel() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [authorized, setAuthorized] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('todas')
+  const [monthFilter, setMonthFilter] = useState('todas')
 
   async function loadAppointments() {
     const { data } = await supabase
@@ -80,34 +94,34 @@ export default function AdminPanel() {
     setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, payment_status } : a)))
   }
 
-async function toggleStaffAssignment(
-  appointmentId: string,
-  staffId: string,
-  isAssigned: boolean,
-  clientId: string,
-  staffName: string
-) {
-  if (isAssigned) {
-    await supabase.from('appointment_staff').delete().eq('appointment_id', appointmentId).eq('staff_id', staffId)
-  } else {
-    await supabase.from('appointment_staff').insert({ appointment_id: appointmentId, staff_id: staffId })
+  async function toggleStaffAssignment(
+    appointmentId: string,
+    staffId: string,
+    isAssigned: boolean,
+    clientId: string,
+    staffName: string
+  ) {
+    if (isAssigned) {
+      await supabase.from('appointment_staff').delete().eq('appointment_id', appointmentId).eq('staff_id', staffId)
+    } else {
+      await supabase.from('appointment_staff').insert({ appointment_id: appointmentId, staff_id: staffId })
 
-    const { data: { session } } = await supabase.auth.getSession()
-    if (session) {
-      fetch('/api/notify-staff-assigned', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({
-          clientId,
-          title: 'Personal asignado a tu cita',
-          body: `${staffName} te atenderá en tu próxima cita.`,
-          url: '/mis-citas',
-        }),
-      }).catch(() => {})
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        fetch('/api/notify-staff-assigned', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({
+            clientId,
+            title: 'Personal asignado a tu cita',
+            body: `${staffName} te atenderá en tu próxima cita.`,
+            url: '/mis-citas',
+          }),
+        }).catch(() => {})
+      }
     }
+    await loadAppointments()
   }
-  await loadAppointments()
-}
 
   async function viewComprobante(path: string) {
     const { data } = await supabase.storage.from('comprobantes').createSignedUrl(path, 60 * 5)
@@ -126,6 +140,14 @@ async function toggleStaffAssignment(
     )
     return base + extras
   }
+
+  const monthOptions = Array.from(new Set(appointments.map((a) => monthKey(a.scheduled_at)))).sort()
+
+  const filtered = appointments.filter((a) => {
+    const statusOk = statusFilter === 'todas' || a.status === statusFilter
+    const monthOk = monthFilter === 'todas' || monthKey(a.scheduled_at) === monthFilter
+    return statusOk && monthOk
+  })
 
   if (loading || !authorized) {
     return <main className="min-h-screen flex items-center justify-center text-gray-500">Cargando...</main>
@@ -150,10 +172,39 @@ async function toggleStaffAssignment(
           </div>
         </div>
 
+        {appointments.length > 0 && (
+          <div className="mt-4 flex flex-wrap gap-3">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="text-sm rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700"
+            >
+              <option value="todas">Todos los estatus</option>
+              {Object.entries(statusLabels).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+
+            <select
+              value={monthFilter}
+              onChange={(e) => setMonthFilter(e.target.value)}
+              className="text-sm rounded-lg border border-gray-300 bg-white px-3 py-2 text-gray-700"
+            >
+              <option value="todas">Todos los meses</option>
+              {monthOptions.map((key) => (
+                <option key={key} value={key}>{monthLabel(key)}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div className="mt-6 space-y-3">
           {appointments.length === 0 && <p className="text-gray-500">No hay citas todavía.</p>}
+          {appointments.length > 0 && filtered.length === 0 && (
+            <p className="text-gray-500">No hay citas que coincidan con los filtros seleccionados.</p>
+          )}
 
-          {appointments.map((a) => (
+          {filtered.map((a) => (
             <div key={a.id} className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-gray-200">
               <div className="flex items-center justify-between">
                 <div>
