@@ -26,12 +26,7 @@ export default function Noticias() {
       setLoading(false)
 
       for (const post of data ?? []) {
-        const { error: viewError } = await supabase
-          .from('news_post_views')
-          .insert({ post_id: post.id, user_id: user.id })
-        if (viewError && viewError.code !== '23505') {
-          console.log('DEBUG error al registrar vista:', viewError)
-        }
+        await supabase.from('news_post_views').insert({ post_id: post.id, user_id: user.id })
       }
     }
     load()

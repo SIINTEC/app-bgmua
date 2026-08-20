@@ -80,13 +80,11 @@ export default function AdminNoticias() {
 
     const { data: { session } } = await supabase.auth.getSession()
     if (session) {
-      const res = await fetch('/api/publicar-noticia', {
+      fetch('/api/publicar-noticia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ title }),
-      })
-      const result = await res.json().catch(() => null)
-      console.log('DEBUG publicar-noticia status:', res.status, result)
+      }).catch(() => {})
     }
 
     setTitle('')
