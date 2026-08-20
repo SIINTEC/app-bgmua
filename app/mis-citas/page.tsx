@@ -1,9 +1,11 @@
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import NotificationPrompt from '../components/NotificationPrompt'
+
 
 const statusLabels: Record<string, string> = {
   pendiente: 'Pendiente',
@@ -113,6 +115,7 @@ export default function MisCitas() {
     <main className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-2xl">
         <h1 className="text-2xl font-semibold text-gray-900">Mis citas</h1>
+        <Link href="/noticias" className="text-sm text-pink-600 underline">Ver noticias y promociones</Link>
         <NotificationPrompt />
 
         {appointments.length > 0 && (

@@ -165,6 +165,7 @@ export default function AdminPanel() {
             <button onClick={handleRefresh} disabled={refreshing} className="text-sm text-gray-500 underline disabled:opacity-50">
               {refreshing ? 'Actualizando...' : 'Actualizar'}
             </button>
+            <Link href="/admin/noticias" className="text-sm text-gray-500 underline">Noticias</Link>
             <Link href="/admin/staff" className="text-sm text-gray-500 underline">Equipo</Link>
             <Link href="/admin/servicios" className="text-sm text-gray-500 underline">Servicios</Link>
             <Link href="/admin/terminos" className="text-sm text-gray-500 underline">Editar términos</Link>
