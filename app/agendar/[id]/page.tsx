@@ -4,6 +4,14 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
+function todayStr() {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 export default function Agendar() {
   const { id } = useParams<{ id: string }>()
   const router = useRouter()
@@ -18,6 +26,7 @@ export default function Agendar() {
   const [loading, setLoading] = useState(false)
   const [checking, setChecking] = useState(true)
   const [paymentInstructions, setPaymentInstructions] = useState('')
+  const [promotion, setPromotion] = useState<any>(null)
 
   useEffect(() => {
     async function init() {
@@ -43,6 +52,31 @@ export default function Agendar() {
         .eq('key', 'payment_instructions')
         .single()
       setPaymentInstructions(paymentData?.value ?? '')
+
+      const { data: promoLinks } = await supabase
+        .from('promotion_services')
+        .select('promotions(*)')
+        .eq('service_id', id)
+
+      const today = todayStr()
+      const applicable = (promoLinks ?? [])
+        .map((pl: any) => pl.promotions)
+        .filter((p: any) => p && p.active && p.start_date <= today && p.end_date >= today)
+
+      if (applicable.length > 0) {
+        const best = applicable.reduce((a: any, b: any) => {
+          const discountA =
+            a.discount_type === 'porcentaje'
+              ? Number(serviceData?.price ?? 0) * (Number(a.discount_value) / 100)
+              : Number(a.discount_value)
+          const discountB =
+            b.discount_type === 'porcentaje'
+              ? Number(serviceData?.price ?? 0) * (Number(b.discount_value) / 100)
+              : Number(b.discount_value)
+          return discountB > discountA ? b : a
+        })
+        setPromotion(best)
+      }
     }
     init()
   }, [id, router])
@@ -53,9 +87,23 @@ export default function Agendar() {
     )
   }
 
-  const total =
-    Number(service?.price ?? 0) +
-    addons.filter((a) => selectedAddons.includes(a.id)).reduce((sum, a) => sum + Number(a.extra_price), 0)
+  const extrasTotal = addons
+    .filter((a) => selectedAddons.includes(a.id))
+    .reduce((sum, a) => sum + Number(a.extra_price), 0)
+
+  const servicePrice = Number(service?.price ?? 0)
+
+  const discountAmount = promotion
+    ? Math.min(
+        promotion.discount_type === 'porcentaje'
+          ? servicePrice * (Number(promotion.discount_value) / 100)
+          : Number(promotion.discount_value),
+        servicePrice
+      )
+    : 0
+
+  const subtotal = servicePrice + extrasTotal
+  const total = subtotal - discountAmount
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -85,6 +133,8 @@ export default function Agendar() {
         terms_accepted_at: new Date().toISOString(),
         deposit_amount: service?.deposit_amount ?? 0,
         payment_status: 'pendiente',
+        promotion_id: promotion?.id ?? null,
+        discount_amount: discountAmount,
       })
       .select()
       .single()
@@ -121,6 +171,16 @@ export default function Agendar() {
           ${Number(service?.price).toLocaleString('es-MX')} · {service?.duration_minutes} min
         </p>
 
+        {promotion && (
+          <div className="rounded-lg bg-pink-50 border border-pink-200 px-3 py-2 text-xs text-pink-700">
+            🎉 Promoción aplicada: <strong>{promotion.name}</strong> (
+            {promotion.discount_type === 'porcentaje'
+              ? `${promotion.discount_value}% de descuento`
+              : `-$${Number(promotion.discount_value).toLocaleString('es-MX')}`}
+            )
+          </div>
+        )}
+
         {addons.length > 0 && (
           <div className="space-y-2">
             <p className="text-sm font-medium text-gray-700">Extras (opcional)</p>
@@ -150,10 +210,6 @@ export default function Agendar() {
           onChange={(e) => setNotes(e.target.value)}
         />
 
-        <div className="flex items-center justify-between border-t pt-3">
-          <span className="text-sm font-medium text-gray-700">Total</span>
-          <span className="font-semibold text-gray-900">${total.toLocaleString('es-MX')}</span>
-        </div>
         {service?.deposit_amount > 0 && (
           <div className="border-t pt-3">
             <p className="text-sm font-medium text-gray-700 mb-1">
@@ -166,7 +222,27 @@ export default function Agendar() {
               Podrás subir tu comprobante desde &quot;Mis citas&quot; después de agendar.
             </p>
           </div>
-        )} 
+        )}
+
+        <div className="border-t pt-3 space-y-1">
+          {discountAmount > 0 && (
+            <>
+              <div className="flex items-center justify-between text-sm text-gray-500">
+                <span>Subtotal</span>
+                <span>${subtotal.toLocaleString('es-MX')}</span>
+              </div>
+              <div className="flex items-center justify-between text-sm text-pink-600">
+                <span>Descuento</span>
+                <span>-${discountAmount.toLocaleString('es-MX')}</span>
+              </div>
+            </>
+          )}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-700">Total</span>
+            <span className="font-semibold text-gray-900">${total.toLocaleString('es-MX')}</span>
+          </div>
+        </div>
+
         {terms && (
           <div className="border-t pt-3">
             <p className="text-sm font-medium text-gray-700 mb-1">Términos y condiciones</p>

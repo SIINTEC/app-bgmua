@@ -45,7 +45,7 @@ export default function AdminPanel() {
   async function loadAppointments() {
     const { data } = await supabase
       .from('appointments')
-      .select('*, services(name, price, duration_minutes), profiles(full_name, phone), appointment_addons(addons(name, extra_price)), appointment_staff(staff(id, full_name))')
+      .select('*, services(name, price, duration_minutes), profiles(full_name, phone), appointment_addons(addons(name, extra_price)), appointment_staff(staff(id, full_name)), promotions(name)')
       .order('scheduled_at', { ascending: true })
 
     setAppointments(data ?? [])
@@ -138,7 +138,8 @@ export default function AdminPanel() {
       (sum: number, ea: any) => sum + Number(ea.addons?.extra_price ?? 0),
       0
     )
-    return base + extras
+    const discount = Number(a.discount_amount ?? 0)
+    return Math.max(base + extras - discount, 0)
   }
 
   const monthOptions = Array.from(new Set(appointments.map((a) => monthKey(a.scheduled_at)))).sort()
@@ -165,6 +166,7 @@ export default function AdminPanel() {
             <button onClick={handleRefresh} disabled={refreshing} className="text-sm text-gray-500 underline disabled:opacity-50">
               {refreshing ? 'Actualizando...' : 'Actualizar'}
             </button>
+            <Link href="/admin/promociones" className="text-sm text-gray-500 underline">Promociones</Link>
             <Link href="/admin/noticias" className="text-sm text-gray-500 underline">Noticias</Link>
             <Link href="/admin/staff" className="text-sm text-gray-500 underline">Equipo</Link>
             <Link href="/admin/servicios" className="text-sm text-gray-500 underline">Servicios</Link>
@@ -245,6 +247,13 @@ export default function AdminPanel() {
                     <li key={i}>{ea.addons?.name} (+${Number(ea.addons?.extra_price).toLocaleString('es-MX')})</li>
                   ))}
                 </ul>
+              )}
+
+              {a.discount_amount > 0 && (
+                <p className="text-xs text-pink-600 mt-1">
+                  Descuento aplicado{a.promotions?.name ? ` (${a.promotions.name})` : ''}: -$
+                  {Number(a.discount_amount).toLocaleString('es-MX')}
+                </p>
               )}
 
               <p className="text-sm font-medium text-gray-700 mt-2">Total: ${total(a).toLocaleString('es-MX')}</p>

@@ -1,11 +1,10 @@
 'use client'
 
-import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import NotificationPrompt from '../components/NotificationPrompt'
-
 
 const statusLabels: Record<string, string> = {
   pendiente: 'Pendiente',
@@ -50,7 +49,7 @@ export default function MisCitas() {
 
       const { data } = await supabase
         .from('appointments')
-        .select('*, services(name, price, duration_minutes), appointment_addons(addons(name, extra_price)), appointment_staff(staff(full_name, bio, photo_url))')
+        .select('*, services(name, price, duration_minutes), appointment_addons(addons(name, extra_price)), appointment_staff(staff(full_name, bio, photo_url)), promotions(name)')
         .eq('client_id', user.id)
         .order('scheduled_at', { ascending: true })
 
@@ -96,7 +95,8 @@ export default function MisCitas() {
       (sum: number, ea: any) => sum + Number(ea.addons?.extra_price ?? 0),
       0
     )
-    return base + extras
+    const discount = Number(a.discount_amount ?? 0)
+    return Math.max(base + extras - discount, 0)
   }
 
   const monthOptions = Array.from(new Set(appointments.map((a) => monthKey(a.scheduled_at)))).sort()
@@ -187,6 +187,13 @@ export default function MisCitas() {
                     <li key={i}>{ea.addons?.name} (+${Number(ea.addons?.extra_price).toLocaleString('es-MX')})</li>
                   ))}
                 </ul>
+              )}
+
+              {a.discount_amount > 0 && (
+                <p className="text-xs text-pink-600 mt-1">
+                  Descuento aplicado{a.promotions?.name ? ` (${a.promotions.name})` : ''}: -$
+                  {Number(a.discount_amount).toLocaleString('es-MX')}
+                </p>
               )}
 
               <p className="text-sm font-medium text-gray-700 mt-2">Total: ${total(a).toLocaleString('es-MX')}</p>
