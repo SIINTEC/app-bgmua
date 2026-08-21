@@ -27,6 +27,12 @@ export default function Agendar() {
   const [checking, setChecking] = useState(true)
   const [paymentInstructions, setPaymentInstructions] = useState('')
   const [promotion, setPromotion] = useState<any>(null)
+  const [salons, setSalons] = useState<any[]>([])
+  const [zones, setZones] = useState<any[]>([])
+  const [siteType, setSiteType] = useState('')
+  const [salonLocationId, setSalonLocationId] = useState('')
+  const [zoneId, setZoneId] = useState('')
+  const [homeAddress, setHomeAddress] = useState('')
 
   useEffect(() => {
     async function init() {
@@ -52,6 +58,11 @@ export default function Agendar() {
         .eq('key', 'payment_instructions')
         .single()
       setPaymentInstructions(paymentData?.value ?? '')
+
+      const { data: salonsData } = await supabase.from('salon_locations').select('*').eq('active', true)
+      const { data: zonesData } = await supabase.from('service_zones').select('*').eq('active', true)
+      setSalons(salonsData ?? [])
+      setZones(zonesData ?? [])
 
       const { data: promoLinks } = await supabase
         .from('promotion_services')
@@ -102,12 +113,27 @@ export default function Agendar() {
       )
     : 0
 
-  const subtotal = servicePrice + extrasTotal
+  const selectedZone = zones.find((z) => z.id === zoneId)
+  const siteCost = siteType === 'domicilio' && selectedZone ? Number(selectedZone.price) : 0
+
+  const subtotal = servicePrice + extrasTotal + siteCost
   const total = subtotal - discountAmount
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
 
+    if (!siteType) {
+      setError('Selecciona si la cita será en el estudio o a domicilio')
+      return
+    }
+    if (siteType === 'estudio' && !salonLocationId) {
+      setError('Selecciona en cuál de nuestros salones te atenderemos')
+      return
+    }
+    if (siteType === 'domicilio' && (!zoneId || !homeAddress.trim())) {
+      setError('Selecciona tu zona y escribe la dirección para el domicilio')
+      return
+    }
     if (!acceptedTerms) {
       setError('Debes aceptar los términos y condiciones para continuar')
       return
@@ -135,6 +161,11 @@ export default function Agendar() {
         payment_status: 'pendiente',
         promotion_id: promotion?.id ?? null,
         discount_amount: discountAmount,
+        site_type: siteType,
+        salon_location_id: siteType === 'estudio' ? salonLocationId : null,
+        zone_id: siteType === 'domicilio' ? zoneId : null,
+        home_address: siteType === 'domicilio' ? homeAddress : null,
+        site_cost: siteCost,
       })
       .select()
       .single()
@@ -181,6 +212,74 @@ export default function Agendar() {
           </div>
         )}
 
+        <div className="space-y-2 border-t pt-3">
+          <p className="text-sm font-medium text-gray-700">¿Dónde te atenderemos?</p>
+          <div className="flex gap-4 text-sm text-gray-700">
+            <label className="flex items-center gap-1">
+              <input
+                type="radio"
+                name="site"
+                checked={siteType === 'estudio'}
+                onChange={() => setSiteType('estudio')}
+              />
+              Estudio / salón
+            </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="radio"
+                name="site"
+                checked={siteType === 'domicilio'}
+                onChange={() => setSiteType('domicilio')}
+              />
+              A domicilio
+            </label>
+          </div>
+
+          {siteType === 'estudio' && (
+            <div className="space-y-2">
+              {salons.length === 0 && <p className="text-xs text-gray-400">No hay salones disponibles por ahora.</p>}
+              {salons.map((s) => (
+                <label key={s.id} className="flex items-start gap-2 text-sm text-gray-600 bg-gray-50 rounded-lg p-2">
+                  <input
+                    type="radio"
+                    name="salon"
+                    checked={salonLocationId === s.id}
+                    onChange={() => setSalonLocationId(s.id)}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="block font-medium text-gray-700">{s.name}</span>
+                    <span className="block text-xs text-gray-500">{s.address}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+
+          {siteType === 'domicilio' && (
+            <div className="space-y-2">
+              <select
+                value={zoneId}
+                onChange={(e) => setZoneId(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                <option value="">Selecciona tu zona</option>
+                {zones.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.name} (+${Number(z.price).toLocaleString('es-MX')})
+                  </option>
+                ))}
+              </select>
+              <textarea
+                placeholder="Dirección completa para el domicilio"
+                value={homeAddress}
+                onChange={(e) => setHomeAddress(e.target.value)}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+            </div>
+          )}
+        </div>
+
         {addons.length > 0 && (
           <div className="space-y-2">
             <p className="text-sm font-medium text-gray-700">Extras (opcional)</p>
@@ -225,17 +324,23 @@ export default function Agendar() {
         )}
 
         <div className="border-t pt-3 space-y-1">
+          {(siteCost > 0 || discountAmount > 0) && (
+            <div className="flex items-center justify-between text-sm text-gray-500">
+              <span>Subtotal</span>
+              <span>${(servicePrice + extrasTotal).toLocaleString('es-MX')}</span>
+            </div>
+          )}
+          {siteCost > 0 && (
+            <div className="flex items-center justify-between text-sm text-gray-500">
+              <span>Costo de domicilio</span>
+              <span>+${siteCost.toLocaleString('es-MX')}</span>
+            </div>
+          )}
           {discountAmount > 0 && (
-            <>
-              <div className="flex items-center justify-between text-sm text-gray-500">
-                <span>Subtotal</span>
-                <span>${subtotal.toLocaleString('es-MX')}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm text-pink-600">
-                <span>Descuento</span>
-                <span>-${discountAmount.toLocaleString('es-MX')}</span>
-              </div>
-            </>
+            <div className="flex items-center justify-between text-sm text-pink-600">
+              <span>Descuento</span>
+              <span>-${discountAmount.toLocaleString('es-MX')}</span>
+            </div>
           )}
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-gray-700">Total</span>

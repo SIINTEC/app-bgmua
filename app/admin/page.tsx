@@ -45,7 +45,7 @@ export default function AdminPanel() {
   async function loadAppointments() {
     const { data } = await supabase
       .from('appointments')
-      .select('*, services(name, price, duration_minutes), profiles(full_name, phone), appointment_addons(addons(name, extra_price)), appointment_staff(staff(id, full_name)), promotions(name)')
+      .select('*, services(name, price, duration_minutes), profiles(full_name, phone), appointment_addons(addons(name, extra_price)), appointment_staff(staff(id, full_name)), promotions(name), salon_locations(name, address), service_zones(name)')
       .order('scheduled_at', { ascending: true })
 
     setAppointments(data ?? [])
@@ -138,8 +138,9 @@ export default function AdminPanel() {
       (sum: number, ea: any) => sum + Number(ea.addons?.extra_price ?? 0),
       0
     )
+    const siteCost = Number(a.site_cost ?? 0)
     const discount = Number(a.discount_amount ?? 0)
-    return Math.max(base + extras - discount, 0)
+    return Math.max(base + extras + siteCost - discount, 0)
   }
 
   const monthOptions = Array.from(new Set(appointments.map((a) => monthKey(a.scheduled_at)))).sort()
@@ -171,6 +172,9 @@ export default function AdminPanel() {
             <Link href="/admin/staff" className="text-sm text-gray-500 underline">Equipo</Link>
             <Link href="/admin/servicios" className="text-sm text-gray-500 underline">Servicios</Link>
             <Link href="/admin/terminos" className="text-sm text-gray-500 underline">Editar términos</Link>
+            <Link href="/admin/salones" className="text-sm text-gray-500 underline">Salones</Link>
+            <Link href="/admin/zonas" className="text-sm text-gray-500 underline">Zonas</Link>
+            <Link href="/admin/extras" className="text-sm text-gray-500 underline">Extras</Link>
             <LogoutButton />
           </div>
         </div>
@@ -221,6 +225,18 @@ export default function AdminPanel() {
               <p className="text-sm text-gray-500 mt-1">
                 {new Date(a.scheduled_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
+
+              {a.site_type === 'estudio' && a.salon_locations && (
+                <p className="text-xs text-gray-500 mt-1">
+                  📍 En salón: {a.salon_locations.name} — {a.salon_locations.address}
+                </p>
+              )}
+              {a.site_type === 'domicilio' && (
+                <p className="text-xs text-gray-500 mt-1">
+                  🏠 A domicilio{a.service_zones?.name ? ` (zona ${a.service_zones.name})` : ''}
+                  {a.home_address ? `: ${a.home_address}` : ''}
+                </p>
+              )}
 
               <div className="mt-2">
                 <p className="text-xs text-gray-500 mb-1">Equipo asignado:</p>

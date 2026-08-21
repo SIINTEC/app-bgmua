@@ -49,7 +49,7 @@ export default function MisCitas() {
 
       const { data } = await supabase
         .from('appointments')
-        .select('*, services(name, price, duration_minutes), appointment_addons(addons(name, extra_price)), appointment_staff(staff(full_name, bio, photo_url)), promotions(name)')
+        .select('*, services(name, price, duration_minutes), appointment_addons(addons(name, extra_price)), appointment_staff(staff(full_name, bio, photo_url)), promotions(name), salon_locations(name, address), service_zones(name)')
         .eq('client_id', user.id)
         .order('scheduled_at', { ascending: true })
 
@@ -95,8 +95,9 @@ export default function MisCitas() {
       (sum: number, ea: any) => sum + Number(ea.addons?.extra_price ?? 0),
       0
     )
+    const siteCost = Number(a.site_cost ?? 0)
     const discount = Number(a.discount_amount ?? 0)
-    return Math.max(base + extras - discount, 0)
+    return Math.max(base + extras + siteCost - discount, 0)
   }
 
   const monthOptions = Array.from(new Set(appointments.map((a) => monthKey(a.scheduled_at)))).sort()
@@ -161,6 +162,18 @@ export default function MisCitas() {
               <p className="text-sm text-gray-500 mt-1">
                 {new Date(a.scheduled_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
+
+              {a.site_type === 'estudio' && a.salon_locations && (
+                <p className="text-xs text-gray-500 mt-1">
+                  📍 En salón: {a.salon_locations.name} — {a.salon_locations.address}
+                </p>
+              )}
+              {a.site_type === 'domicilio' && (
+                <p className="text-xs text-gray-500 mt-1">
+                  🏠 A domicilio{a.service_zones?.name ? ` (zona ${a.service_zones.name})` : ''}
+                  {a.home_address ? `: ${a.home_address}` : ''}
+                </p>
+              )}
 
               {a.appointment_staff?.length > 0 && (
                 <div className="mt-2 space-y-2">
