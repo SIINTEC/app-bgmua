@@ -33,6 +33,7 @@ export default function Agendar() {
   const [salonLocationId, setSalonLocationId] = useState('')
   const [zoneId, setZoneId] = useState('')
   const [homeAddress, setHomeAddress] = useState('')
+  const [quantity, setQuantity] = useState(1)
 
   useEffect(() => {
     async function init() {
@@ -102,26 +103,32 @@ export default function Agendar() {
     .filter((a) => selectedAddons.includes(a.id))
     .reduce((sum, a) => sum + Number(a.extra_price), 0)
 
-  const servicePrice = Number(service?.price ?? 0)
+  const servicePriceUnit = Number(service?.price ?? 0)
+  const servicePriceTotal = servicePriceUnit * quantity
 
   const discountAmount = promotion
     ? Math.min(
         promotion.discount_type === 'porcentaje'
-          ? servicePrice * (Number(promotion.discount_value) / 100)
+          ? servicePriceTotal * (Number(promotion.discount_value) / 100)
           : Number(promotion.discount_value),
-        servicePrice
+        servicePriceTotal
       )
     : 0
 
   const selectedZone = zones.find((z) => z.id === zoneId)
   const siteCost = siteType === 'domicilio' && selectedZone ? Number(selectedZone.price) : 0
 
-  const subtotal = servicePrice + extrasTotal + siteCost
+  const subtotal = servicePriceTotal + extrasTotal + siteCost
   const total = subtotal - discountAmount
+  const depositAmount = Number(service?.deposit_amount ?? 0) * quantity
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
 
+    if (quantity < 1) {
+      setError('La cantidad de personas debe ser al menos 1')
+      return
+    }
     if (!siteType) {
       setError('Selecciona si la cita será en el estudio o a domicilio')
       return
@@ -148,16 +155,22 @@ export default function Agendar() {
       return
     }
 
+    const durationMinutesTotal = Number(service?.duration_minutes ?? 60) * quantity
+    const scheduledDate = new Date(scheduledAt)
+    const busyUntil = new Date(scheduledDate.getTime() + (durationMinutesTotal + 60) * 60000)
+
     const { data: appointment, error: insertError } = await supabase
       .from('appointments')
       .insert({
         client_id: user.id,
         service_id: id,
-        scheduled_at: new Date(scheduledAt).toISOString(),
+        scheduled_at: scheduledDate.toISOString(),
+        busy_until: busyUntil.toISOString(),
+        quantity,
         notes,
         terms_accepted: true,
         terms_accepted_at: new Date().toISOString(),
-        deposit_amount: service?.deposit_amount ?? 0,
+        deposit_amount: depositAmount,
         payment_status: 'pendiente',
         promotion_id: promotion?.id ?? null,
         discount_amount: discountAmount,
@@ -172,7 +185,11 @@ export default function Agendar() {
 
     if (insertError || !appointment) {
       setLoading(false)
-      setError(insertError?.message ?? 'No se pudo crear la cita')
+      if (insertError?.code === '23P01') {
+        setError('Ese horario ya no está disponible (muy cerca de otra cita). Por favor elige otro horario.')
+      } else {
+        setError(insertError?.message ?? 'No se pudo crear la cita')
+      }
       return
     }
 
@@ -211,6 +228,22 @@ export default function Agendar() {
             )
           </div>
         )}
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Cantidad de personas</label>
+          <input
+            type="number"
+            min={1}
+            value={quantity}
+            onChange={(e) => setQuantity(Math.max(1, Number(e.target.value)))}
+            className="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+          />
+          {quantity > 1 && (
+            <p className="text-xs text-gray-400 mt-1">
+              El precio y la duración se multiplican automáticamente por {quantity}.
+            </p>
+          )}
+        </div>
 
         <div className="space-y-2 border-t pt-3">
           <p className="text-sm font-medium text-gray-700">¿Dónde te atenderemos?</p>
@@ -309,14 +342,17 @@ export default function Agendar() {
           onChange={(e) => setNotes(e.target.value)}
         />
 
-        {service?.deposit_amount > 0 && (
+        {depositAmount > 0 && (
           <div className="border-t pt-3">
             <p className="text-sm font-medium text-gray-700 mb-1">
-              Anticipo requerido: ${Number(service.deposit_amount).toLocaleString('es-MX')}
+              Anticipo requerido: ${depositAmount.toLocaleString('es-MX')}
             </p>
             <div className="text-xs text-gray-500 bg-gray-50 rounded-lg p-2 whitespace-pre-line">
               {paymentInstructions}
             </div>
+            <p className="text-xs text-amber-600 mt-1 font-medium">
+              Tienes 72 horas para subir tu comprobante o la cita se cancelará automáticamente.
+            </p>
             <p className="text-xs text-gray-400 mt-1">
               Podrás subir tu comprobante desde &quot;Mis citas&quot; después de agendar.
             </p>
@@ -324,10 +360,10 @@ export default function Agendar() {
         )}
 
         <div className="border-t pt-3 space-y-1">
-          {(siteCost > 0 || discountAmount > 0) && (
+          {(siteCost > 0 || discountAmount > 0 || quantity > 1) && (
             <div className="flex items-center justify-between text-sm text-gray-500">
               <span>Subtotal</span>
-              <span>${(servicePrice + extrasTotal).toLocaleString('es-MX')}</span>
+              <span>${(servicePriceTotal + extrasTotal).toLocaleString('es-MX')}</span>
             </div>
           )}
           {siteCost > 0 && (

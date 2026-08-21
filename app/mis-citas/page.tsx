@@ -130,7 +130,7 @@ export default function MisCitas() {
   }
 
   function total(a: any) {
-    const base = Number(a.services?.price ?? 0)
+    const base = Number(a.services?.price ?? 0) * Number(a.quantity ?? 1)
     const extras = (a.appointment_addons ?? []).reduce(
       (sum: number, ea: any) => sum + Number(ea.addons?.extra_price ?? 0),
       0
@@ -205,6 +205,10 @@ export default function MisCitas() {
               <p className="text-sm text-gray-500 mt-1">
                 {new Date(a.scheduled_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
+
+              {a.quantity > 1 && (
+                <p className="text-xs text-gray-500 mt-1">👥 {a.quantity} personas</p>
+              )}
 
               {a.site_type === 'estudio' && a.salon_locations && (
                 <p className="text-xs text-gray-500 mt-1">

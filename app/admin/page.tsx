@@ -145,7 +145,7 @@ export default function AdminPanel() {
   }
 
   function total(a: any) {
-    const base = Number(a.services?.price ?? 0)
+    const base = Number(a.services?.price ?? 0) * Number(a.quantity ?? 1)
     const extras = (a.appointment_addons ?? []).reduce(
       (sum: number, ea: any) => sum + Number(ea.addons?.extra_price ?? 0),
       0
@@ -239,6 +239,10 @@ export default function AdminPanel() {
                 {new Date(a.scheduled_at).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'short' })}
               </p>
 
+              {a.quantity > 1 && (
+                <p className="text-xs text-gray-500 mt-1">👥 {a.quantity} personas</p>
+              )}
+
               {a.site_type === 'estudio' && a.salon_locations && (
                 <p className="text-xs text-gray-500 mt-1">
                   📍 En salón: {a.salon_locations.name} — {a.salon_locations.address}
@@ -312,14 +316,24 @@ export default function AdminPanel() {
                 </div>
               )}
 
-              <div className="mt-3 flex gap-3">
+               <div className="mt-3 flex gap-3">
                 {a.status === 'pendiente' && (
-                  <button onClick={() => updateStatus(a.id, 'confirmada')} className="text-xs font-medium text-green-700">
+                  <button
+                    onClick={() => updateStatus(a.id, 'confirmada')}
+                    disabled={a.payment_status !== 'confirmado'}
+                    title={a.payment_status !== 'confirmado' ? 'Primero confirma el pago del anticipo' : undefined}
+                    className={`text-xs font-medium ${a.payment_status === 'confirmado' ? 'text-green-700' : 'text-gray-300 cursor-not-allowed'}`}
+                  >
                     Confirmar cita
                   </button>
                 )}
                 {a.status !== 'completada' && a.status !== 'cancelada' && (
-                  <button onClick={() => updateStatus(a.id, 'completada')} className="text-xs font-medium text-blue-700">
+                  <button
+                    onClick={() => updateStatus(a.id, 'completada')}
+                    disabled={a.status !== 'confirmada'}
+                    title={a.status !== 'confirmada' ? 'Primero confirma la cita' : undefined}
+                    className={`text-xs font-medium ${a.status === 'confirmada' ? 'text-blue-700' : 'text-gray-300 cursor-not-allowed'}`}
+                  >
                     Marcar completada
                   </button>
                 )}
