@@ -85,8 +85,20 @@ export default function AdminPanel() {
   }
 
   async function updateStatus(id: string, status: string) {
+    const appointment = appointments.find((a) => a.id === id)
     await supabase.from('appointments').update({ status }).eq('id', id)
     setAppointments((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)))
+
+    if (status === 'completada' && appointment) {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        fetch('/api/notify-review-request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ clientId: appointment.client_id }),
+        }).catch(() => {})
+      }
+    }
   }
 
   async function updatePaymentStatus(id: string, payment_status: string) {
@@ -175,6 +187,7 @@ export default function AdminPanel() {
             <Link href="/admin/salones" className="text-sm text-gray-500 underline">Salones</Link>
             <Link href="/admin/zonas" className="text-sm text-gray-500 underline">Zonas</Link>
             <Link href="/admin/extras" className="text-sm text-gray-500 underline">Extras</Link>
+            <Link href="/admin/opiniones" className="text-sm text-gray-500 underline">Opiniones</Link>
             <LogoutButton />
           </div>
         </div>

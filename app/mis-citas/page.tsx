@@ -39,6 +39,46 @@ export default function MisCitas() {
   const [statusFilter, setStatusFilter] = useState('todas')
   const [monthFilter, setMonthFilter] = useState('todas')
 
+  const [reviewDrafts, setReviewDrafts] = useState<Record<string, { rating: number; comment: string }>>({})
+  const [submittingReview, setSubmittingReview] = useState<string | null>(null)
+
+  function setDraftRating(appointmentId: string, rating: number) {
+    setReviewDrafts((prev) => ({ ...prev, [appointmentId]: { rating, comment: prev[appointmentId]?.comment ?? '' } }))
+  }
+
+  function setDraftComment(appointmentId: string, comment: string) {
+    setReviewDrafts((prev) => ({ ...prev, [appointmentId]: { rating: prev[appointmentId]?.rating ?? 0, comment } }))
+  }
+
+  async function submitReview(appointmentId: string) {
+    const draft = reviewDrafts[appointmentId]
+    if (!draft || !draft.rating) {
+      alert('Selecciona una calificación de estrellas')
+      return
+    }
+    setSubmittingReview(appointmentId)
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) {
+      setSubmittingReview(null)
+      return
+    }
+    const { error } = await supabase.from('reviews').insert({
+      appointment_id: appointmentId,
+      client_id: user.id,
+      rating: draft.rating,
+      comment: draft.comment || null,
+    })
+    if (error) {
+      alert('Error al enviar tu calificación: ' + error.message)
+      setSubmittingReview(null)
+      return
+    }
+    setAppointments((prev) =>
+      prev.map((a) => (a.id === appointmentId ? { ...a, reviews: [{ rating: draft.rating, comment: draft.comment }] } : a))
+    )
+    setSubmittingReview(null)
+  }
+
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
@@ -49,7 +89,7 @@ export default function MisCitas() {
 
       const { data } = await supabase
         .from('appointments')
-        .select('*, services(name, price, duration_minutes), appointment_addons(addons(name, extra_price)), appointment_staff(staff(full_name, bio, photo_url)), promotions(name), salon_locations(name, address), service_zones(name)')
+        .select('*, services(name, price, duration_minutes), appointment_addons(addons(name, extra_price)), appointment_staff(staff(full_name, bio, photo_url)), promotions(name), salon_locations(name, address), service_zones(name), reviews(rating, comment)')
         .eq('client_id', user.id)
         .order('scheduled_at', { ascending: true })
 
@@ -116,7 +156,10 @@ export default function MisCitas() {
     <main className="min-h-screen bg-gray-50 px-4 py-10">
       <div className="mx-auto max-w-2xl">
         <h1 className="text-2xl font-semibold text-gray-900">Mis citas</h1>
-        <Link href="/noticias" className="text-sm text-pink-600 underline">Ver noticias y promociones</Link>
+        <div className="mt-1">
+        <Link href="/noticias" className="text-sm text-pink-600 underline mr-4">Ver noticias y promociones</Link>
+        <Link href="/opiniones" className="text-sm text-pink-600 underline">Ver opiniones de clientas</Link>
+        </div>
         <NotificationPrompt />
 
         {appointments.length > 0 && (
@@ -231,6 +274,54 @@ export default function MisCitas() {
                   )}
                 </div>
               )}
+
+              {(() => {
+                const review = Array.isArray(a.reviews) ? a.reviews[0] : a.reviews
+                if (a.status === 'completada' && !review) {
+                  return (
+                    <div className="mt-3 border-t pt-3">
+                      <p className="text-sm font-medium text-gray-700 mb-1">¿Cómo estuvo tu servicio?</p>
+                      <div className="flex gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setDraftRating(a.id, star)}
+                            className={`text-xl ${(reviewDrafts[a.id]?.rating ?? 0) >= star ? 'text-yellow-400' : 'text-gray-300'}`}
+                          >
+                            ★
+                          </button>
+                        ))}
+                      </div>
+                      <textarea
+                        placeholder="Cuéntanos tu experiencia (opcional)"
+                        value={reviewDrafts[a.id]?.comment ?? ''}
+                        onChange={(e) => setDraftComment(a.id, e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mt-2"
+                      />
+                      <button
+                        onClick={() => submitReview(a.id)}
+                        disabled={submittingReview === a.id}
+                        className="mt-2 rounded-lg bg-gray-900 px-4 py-2 text-xs font-medium text-white disabled:opacity-50"
+                      >
+                        {submittingReview === a.id ? 'Enviando...' : 'Enviar calificación'}
+                      </button>
+                    </div>
+                  )
+                }
+                if (review) {
+                  return (
+                    <div className="mt-3 border-t pt-3">
+                      <p className="text-sm font-medium text-gray-700">Tu calificación</p>
+                      <p className="text-yellow-400 text-lg">
+                        {'★'.repeat(review.rating)}{'☆'.repeat(5 - review.rating)}
+                      </p>
+                      {review.comment && <p className="text-xs text-gray-500 mt-1">{review.comment}</p>}
+                    </div>
+                  )
+                }
+                return null
+              })()}
 
               {a.status !== 'cancelada' && a.status !== 'completada' && (
                 <button onClick={() => cancelar(a.id)} className="mt-3 text-xs font-medium text-red-600">
